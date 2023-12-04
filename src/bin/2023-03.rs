@@ -1,14 +1,7 @@
 use adventofcode::*;
-use arrayvec::ArrayVec;
 use itertools::Itertools;
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
-enum Data {
-    Value(usize),
-    None,
-}
+use std::collections::HashMap;
 
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 struct Coord(usize, usize);

@@ -1,8 +1,8 @@
-use std::collections::{HashMap, HashSet};
-
 use adventofcode::*;
 use arrayvec::ArrayVec;
+use itertools::Itertools;
 use regex::Regex;
+use std::collections::{HashMap, HashSet};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Data {
@@ -13,21 +13,20 @@ enum Data {
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 struct Coord(usize, usize);
 
-/// Given a point, get a vector of all its neighbours
+/// Given a point, yields all its neighbours
 /// Includes diagonal neighbours
-fn neighbours_impl(
-    x: usize,
-    y: usize,
-    x_max: usize,
-    y_max: usize,
-) -> impl Iterator<Item = (usize, usize)> {
-    let xs = 1.max(x) - 1..=(x + 1).min(x_max - 1);
-    let ys = 1.max(y) - 1..=(y + 1).min(y_max - 1);
-    xs.flat_map(move |x_| ys.clone().map(move |y_| (x_, y_)))
-        .filter(move |&(x_, y_)| x_ != x || y_ != y)
-}
-
 fn neighbours(coord: &Coord, x_max: usize, y_max: usize) -> impl Iterator<Item = Coord> {
+    fn neighbours_impl(
+        x: usize,
+        y: usize,
+        x_max: usize,
+        y_max: usize,
+    ) -> impl Iterator<Item = (usize, usize)> {
+        let xs = 1.max(x) - 1..=(x + 1).min(x_max - 1);
+        let ys = 1.max(y) - 1..=(y + 1).min(y_max - 1);
+        xs.flat_map(move |x_| ys.clone().map(move |y_| (x_, y_)))
+            .filter(move |&(x_, y_)| x_ != x || y_ != y)
+    }
     neighbours_impl(coord.0, coord.1, x_max, y_max).map(|(x, y)| Coord { 0: x, 1: y })
 }
 
@@ -78,21 +77,15 @@ fn part2() -> anyhow::Result<()> {
     for coord in symbols.keys() {
         let neighbours = neighbours(coord, line_width, line_height);
 
-        let mut neighbour_indices = ArrayVec::<_, 2>::new();
-        for neighbour in neighbours {
-            if let Some(idx) = coord_to_index.get(&neighbour) {
-                if !neighbour_indices.contains(idx) {
-                    if neighbour_indices.try_push(*idx).is_err() {
-                        neighbour_indices.clear();
-                        break;
-                    }
-                }
-            }
-        }
-        // println!("{neighbour_indices:?} {coord:?}");
-
-        if let [idx1, idx2] = neighbour_indices[..] {
-            sum_of_gears += numbers[idx1] * numbers[idx2];
+        // Extract the indices the two neighbours
+        if let [idx1, idx2] = neighbours
+            // Not all coordinates have a number (e.g. ".")
+            .filter_map(|x| coord_to_index.get(&x))
+            // May be neighbours with multiple digits of a number
+            .unique()
+            .collect::<Vec<_>>()[..]
+        {
+            sum_of_gears += numbers[*idx1] * numbers[*idx2];
         }
     }
 
@@ -147,9 +140,8 @@ fn part1() -> anyhow::Result<()> {
     for symbol in symbols.keys() {
         let neighbours = neighbours(symbol, line_width, line_height);
         for neighbour in neighbours {
-            match coord_to_index.get(&neighbour) {
-                Some(idx) => visited[*idx] = true,
-                None => unsafe { std::hint::unreachable_unchecked() },
+            if let Some(idx) = coord_to_index.get(&neighbour) {
+                visited[*idx] = true;
             }
         }
     }

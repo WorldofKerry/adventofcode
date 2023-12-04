@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use adventofcode::*;
+use arrayvec::ArrayVec;
 use regex::Regex;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -14,31 +15,35 @@ struct Coord(usize, usize);
 
 /// Given a point, get a vector of all its neighbours
 /// Includes diagonal neighbours
-fn neighbours(
+fn neighbours_impl(
     x: usize,
     y: usize,
     x_max: usize,
     y_max: usize,
 ) -> impl Iterator<Item = (usize, usize)> {
-    let xs = std::cmp::max(1, x) - 1..=std::cmp::min(x + 1, x_max - 1);
-    let ys = std::cmp::max(1, y) - 1..=std::cmp::min(y + 1, y_max - 1);
+    let xs = 1.max(x) - 1..=(x + 1).min(x_max - 1);
+    let ys = 1.max(y) - 1..=(y + 1).min(y_max - 1);
     xs.flat_map(move |x_| ys.clone().map(move |y_| (x_, y_)))
         .filter(move |&(x_, y_)| x_ != x || y_ != y)
 }
 
-fn part2() {
+fn neighbours(coord: &Coord, x_max: usize, y_max: usize) -> impl Iterator<Item = Coord> {
+    neighbours_impl(coord.0, coord.1, x_max, y_max).map(|(x, y)| Coord { 0: x, 1: y })
+}
+
+fn part2() -> anyhow::Result<()> {
     let input = get_input();
 
     // Populate numbers
     let mut numbers = vec![];
     let mut coord_to_index = HashMap::new();
     for (i, line) in input.lines().enumerate() {
-        let re = Regex::new(r"([0-9]+)").unwrap();
+        let re = Regex::new(r"([0-9]+)")?;
         for capture in re.captures_iter(line) {
             let (_, [value]) = capture.extract();
             let start = capture.get(1).unwrap().start();
             let end = capture.get(1).unwrap().end();
-            let value = value.parse::<usize>().unwrap();
+            let value = value.parse::<usize>()?;
             numbers.push(value);
             for idx in start..end {
                 coord_to_index.insert(Coord { 0: i, 1: idx }, numbers.len() - 1);
@@ -49,7 +54,7 @@ fn part2() {
     // Populate symbols
     let mut symbols = HashMap::new();
     for (i, line) in input.lines().enumerate() {
-        let re = Regex::new(r"([^[0-9].])").unwrap();
+        let re = Regex::new(r"([^[0-9].])")?;
         for capture in re.captures_iter(line) {
             let (_, [value]) = capture.extract();
             let start = capture.get(1).unwrap().start();
@@ -70,40 +75,45 @@ fn part2() {
     // Find symbols with exactly two number neighbours
     // Sum up the product of the numbers
     let mut sum_of_gears = 0;
-    for symbol in symbols.keys() {
-        let neighbours = neighbours(symbol.0, symbol.1, line_width, line_height);
+    for coord in symbols.keys() {
+        let neighbours = neighbours(coord, line_width, line_height);
 
-        let mut neighbour_indices = HashSet::new();
+        let mut neighbour_indices = ArrayVec::<_, 2>::new();
         for neighbour in neighbours {
-            if let Some(idx) = coord_to_index.get(&Coord {
-                0: neighbour.0,
-                1: neighbour.1,
-            }) {
-                neighbour_indices.insert(*idx);
+            if let Some(idx) = coord_to_index.get(&neighbour) {
+                if !neighbour_indices.contains(idx) {
+                    if neighbour_indices.try_push(*idx).is_err() {
+                        neighbour_indices.clear();
+                        break;
+                    }
+                }
             }
         }
+        // println!("{neighbour_indices:?} {coord:?}");
 
-        if let [idx1, idx2] = neighbour_indices.iter().collect::<Vec<_>>()[..] {
-            sum_of_gears += numbers[*idx1] * numbers[*idx2];
+        if let [idx1, idx2] = neighbour_indices[..] {
+            sum_of_gears += numbers[idx1] * numbers[idx2];
         }
     }
 
     dbg!(&sum_of_gears);
+
+    Ok(())
 }
 
-fn part1() {
+fn part1() -> anyhow::Result<()> {
     let input = get_input();
 
     // Populate numbers
     let mut numbers = vec![];
     let mut coord_to_index = HashMap::new();
     for (i, line) in input.lines().enumerate() {
-        let re = Regex::new(r"([0-9]+)").unwrap();
+        let re = Regex::new(r"([0-9]+)")?;
         for capture in re.captures_iter(line) {
             let (_, [value]) = capture.extract();
             let start = capture.get(1).unwrap().start();
             let end = capture.get(1).unwrap().end();
-            let value = value.parse::<usize>().unwrap();
+            let value = value.parse::<usize>()?;
             numbers.push(value);
             for idx in start..end {
                 coord_to_index.insert(Coord { 0: i, 1: idx }, numbers.len() - 1);
@@ -114,7 +124,7 @@ fn part1() {
     // Populate symbols
     let mut symbols = HashMap::new();
     for (i, line) in input.lines().enumerate() {
-        let re = Regex::new(r"([^[0-9].])").unwrap();
+        let re = Regex::new(r"([^[0-9].])")?;
         for capture in re.captures_iter(line) {
             let (_, [value]) = capture.extract();
             let start = capture.get(1).unwrap().start();
@@ -135,13 +145,11 @@ fn part1() {
     // Mark visited numbers
     let mut visited = vec![false; numbers.len()];
     for symbol in symbols.keys() {
-        let neighbours = neighbours(symbol.0, symbol.1, line_width, line_height);
+        let neighbours = neighbours(symbol, line_width, line_height);
         for neighbour in neighbours {
-            if let Some(idx) = coord_to_index.get(&Coord {
-                0: neighbour.0,
-                1: neighbour.1,
-            }) {
-                visited[*idx] = true;
+            match coord_to_index.get(&neighbour) {
+                Some(idx) => visited[*idx] = true,
+                None => unsafe { std::hint::unreachable_unchecked() },
             }
         }
     }
@@ -157,6 +165,7 @@ fn part1() {
         sum
     };
     dbg!(&sum);
+    Ok(())
 }
 
 fn main() {
